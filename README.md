@@ -32,8 +32,9 @@ Analyze sentiment and trends in r/USCIS Reddit discussions to understand communi
    ```
 
 3. **Run analysis**
-
+   ```bash
    python main.py
+   ```
 
 ## Sample Results
 
