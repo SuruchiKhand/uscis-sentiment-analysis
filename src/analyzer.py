@@ -46,7 +46,7 @@ class USCISAnalyzer:
         # Remove empty posts
         self.df = self.df[self.df["clean_text"].str.len() > 10]
 
-        print("Preprocessing complete! {len(self.df)} posts ready for analysis.")
+        print(f"Preprocessing complete! {len(self.df)} posts ready for analysis.")
 
     def clean_text(self, text):
         """Clean individual text entries."""
@@ -163,34 +163,49 @@ class USCISAnalyzer:
         """Perform topic modeling"""
         print("Performing topic analysis...")
 
-        # Create TF-IDF vectors
+        # Create TF-IDF vectors with parameters suitable for smaller datasets
         vectorizer = TfidfVectorizer(
-            max_features=100, stop_words="english", ngram_range=(1, 2), min_df=5
+            max_features=100,
+            stop_words="english",
+            ngram_range=(1, 2),
+            min_df=1,  # Changed from 5 to 1 for smaller datasets
+            max_df=0.95,
         )
-        tfidf_matrix = vectorizer.fit_transform(self.df["clean_text"])
 
-        # Perform LDA
-        lda = LatentDirichletAllocation(
-            n_components=n_topics, random_state=42, max_iter=10
-        )
-        lda.fit(tfidf_matrix)
+        try:
+            tfidf_matrix = vectorizer.fit_transform(self.df["clean_text"])
 
-        # Extract topics
-        feature_names = vectorizer.get_feature_names_out()
-        topics = []
+            # Check if we have enough terms
+            if tfidf_matrix.shape[1] == 0:
+                print("No terms found after vectorization")
+                return []
 
-        for topic_idx, topic in enumerate(lda.components_):
-            top_words = [feature_names[i] for i in topic.argsort()[-8:]][::-1]
-            topics.append(
-                {
-                    "topic_id": topic_idx + 1,
-                    "keywords": top_words,
-                    "description": f"Topic[topic_idx + 1]: {', '.join(top_words[:5])}",
-                }
+            # Perform LDA
+            lda = LatentDirichletAllocation(
+                n_components=min(n_topics, len(self.df)), random_state=42, max_iter=10
             )
-        return topics
+            lda.fit(tfidf_matrix)
 
-    def analyze_sentiments(self):
+            # Extract topics
+            feature_names = vectorizer.get_feature_names_out()
+            topics = []
+
+            for topic_idx, topic in enumerate(lda.components_):
+                top_words = [feature_names[i] for i in topic.argsort()[-8:]][::-1]
+                topics.append(
+                    {
+                        "topic_id": topic_idx + 1,
+                        "keywords": top_words,
+                        "description": f"Topic {topic_idx + 1}: {', '.join(top_words[:5])}",
+                    }
+                )
+            return topics
+
+        except Exception as e:
+            print(f"Topic analysis failed: {e}")
+            return []
+
+    def analyze_sentiment(self):
         """Perform sentiment analysis."""
         print("Performing sentiment analysis...")
 
@@ -213,73 +228,75 @@ class USCISAnalyzer:
         # Get sentiment distribution
         sentiment_counts = self.df["sentiment"].value_counts()
 
-        # Monthly sentiment trends
-        self.df["month"] = self.df["created_date"].dt.to_period("M")
+        # Monthly sentiment trends - fix timezone warning
+        self.df["month"] = (
+            self.df["created_date"].dt.tz_localize(None).dt.to_period("M")
+        )
         monthly_sentiment = (
             self.df.groupby(["month", "sentiment"]).size().unstack(fill_value=0)
         )
 
         return {
-            "sentiment_counts": sentiment_counts,
+            "sentiment_counts": sentiment_counts,  # This is what your main.py expects
             "monthly_trends": monthly_sentiment,
             "average_polarity": self.df["polarity_score"].mean(),
         }
 
-        def analyze_uscis_categories(self):
-            """Analyze USCIS specific categories."""
-            print("Analyzing USCIS categories...")
+    def analyze_uscis_categories(self):
+        """Analyze USCIS specific categories."""
+        print("Analyzing USCIS categories...")
 
-            categories = {
-                "green_card": [
-                    "green card",
-                    "i485",
-                    "adjustment of status",
-                    "aos",
-                    "permanent resident",
-                ],
-                "citizenship": [
-                    "n400",
-                    "citizenship",
-                    "naturalization",
-                    "oath ceremony",
-                    "citizen",
-                ],
-                "work_visa": [
-                    "h1b",
-                    "h-1b",
-                    "i94",
-                    "work authorization",
-                    "ead",
-                    "work permit",
-                ],
-                "family_visa": [
-                    "i130",
-                    "family petition",
-                    "spouse visa",
-                    "fiance",
-                    "k1",
-                    "marriage",
-                ],
-                "processing_issues": [
-                    "delay",
-                    "waiting",
-                    "processing time",
-                    "stuck",
-                    "slow",
-                    "expedite",
-                ],
-            }
+        categories = {
+            "green_card": [
+                "green card",
+                "i485",
+                "adjustment of status",
+                "aos",
+                "permanent resident",
+            ],
+            "citizenship": [
+                "n400",
+                "citizenship",
+                "naturalization",
+                "oath ceremony",
+                "citizen",
+            ],
+            "work_visa": [
+                "h1b",
+                "h-1b",
+                "i94",
+                "work authorization",
+                "ead",
+                "work permit",
+            ],
+            "family_visa": [
+                "i130",
+                "family petition",
+                "spouse visa",
+                "fiance",
+                "k1",
+                "marriage",
+            ],
+            "processing_issues": [
+                "delay",
+                "waiting",
+                "processing time",
+                "stuck",
+                "slow",
+                "expedite",
+            ],
+        }
 
-            category_counts = {}
-            category_posts = {}
+        category_counts = {}
+        category_posts = {}
 
-            for category, keywords in categories.items():
-                pattern = "|".join(keywords)
-                mask = self.df["clean_text"].str.contains(pattern, case=False)
-                count = mask.sum()
-                category_counts[category] = count
-                category_posts[category] = self.df[mask]
-            return category_counts, category_posts
+        for category, keywords in categories.items():
+            pattern = "|".join(keywords)
+            mask = self.df["clean_text"].str.contains(pattern, case=False)
+            count = mask.sum()
+            category_counts[category] = count
+            category_posts[category] = self.df[mask]
+        return category_counts, category_posts
 
 
 if __name__ == "__main__":
@@ -304,9 +321,9 @@ if __name__ == "__main__":
         print(f" {topic['description']}")
 
     print(f"\n SENTIMENT DISTRIBUTION:")
-    for sentiment, count in sentiment["sentiment_distribution"].items():
+    for sentiment_type, count in sentiment["sentiment_counts"].items():
         percentage = (count / len(analyzer.df)) * 100
-        print(f"{sentiment}: {count} ({percentage:.1f}%)")
+        print(f"{sentiment_type}: {count} ({percentage:.1f}%)")
 
     print(f"\n USCIS CATEGORIES:")
     for category, count in categories.items():

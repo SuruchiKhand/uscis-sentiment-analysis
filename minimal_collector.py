@@ -37,21 +37,21 @@ def collect_sample_data():
                 }
             )
 
-            # Create DataFrame and save
-            df = pd.DataFrame(posts_data)
+        # Create DataFrame and save
+        df = pd.DataFrame(posts_data)
 
-            # Ensure the data directory exists
-            import os
+        # Ensure the data directory exists
+        import os
 
-            if not os.path.exists("data"):
-                os.makedirs("data")
+        if not os.path.exists("data"):
+            os.makedirs("data")
 
-            # Save to CSV
-            df.to_csv("data/uscis_posts.csv", index=False)
-            print(f"Saved {len(df)} posts to data/uscis_posts.csv")
-            print(f"Columns: {list(df.columns)}")
+        # Save to CSV
+        df.to_csv("data/uscis_posts.csv", index=False)
+        print(f"Saved {len(df)} posts to data/uscis_posts.csv")
+        print(f"Columns: {list(df.columns)}")
 
-            return df
+        return df
 
     except Exception as e:
         print(f"Error: {e}")
